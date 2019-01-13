@@ -1,236 +1,114 @@
-const GRID_WIDTH = 1280;
-const GRID_HEIGHT = 720;
-const GRID_ROWS = 36;
-const GRID_COLS = 64;
-const GAME_SPEED = 1000;
+class Game {
+    constructor(gridWidth, gridHeight, gridRows, gridCols, root) {
+        this.gridWidth  = gridWidth;
+        this.gridHeight = gridHeight;
+        this.gridRows   = gridRows;
+        this.gridCols   = gridCols;
+        this.root    = root;
 
-const grid = createGrid(GRID_ROWS, GRID_COLS);
-const nextGrid = createGrid(GRID_ROWS, GRID_COLS);
+        this.grid       = new Grid(gridWidth, gridHeight, gridRows, gridCols);
+        this.isPlaying  = false;
+        this.baseSpeed  = 1000;
+        this.speed      = 0;
+        this.interval   = null;
+        this.element    = null;
+        this.controls   = {};
 
-let isPlaying = false;
-let interval = null;
+        this.next = this.next.bind(this);
+        this._handleStartButtonClick = this._handleStartButtonClick.bind(this);
 
-const root = document.getElementById('root');
-
-const table = createTable(GRID_ROWS, GRID_COLS);
-craeteControls();
-
-function play() {
-    computeNextGrid();
-    updateView();
-}
-
-function updateView() {
-    for (let i = 0; i < grid.length; i++) {
-        for (let j = 0; j < grid[i].length; j++) {
-            const cell = table.rows[i].cells[j];
-            const isCellAlive = grid[i][j] === 1 ? true : false;
-
-            cell.classList.toggle('alive', isCellAlive);
-        }        
-    }
-}
-
-function createTable(rows, cols) {
-    const table = document.createElement('table');
-
-    table.className = 'grid';
-
-    for (let i = 0; i < rows; i++) {
-        const row = document.createElement('tr');
-
-        row.className = 'row';
-
-        for (let j = 0; j < cols; j++) {
-            const cell = document.createElement('td');
-
-            cell.className = 'cell';
-            cell.width = GRID_WIDTH / cols;
-            cell.height = GRID_HEIGHT / rows;
-
-            row.appendChild(cell);
-        }
-
-        table.appendChild(row);
+        this._init();
     }
 
-    table.addEventListener('click', () => {
-        if (!event.target.classList.contains('cell')) return;
+    next() {
+        this.grid.next();
+    }
 
-        const cell = event.target;
-        const rowIndex = cell.parentNode.rowIndex;
-        const cellIndex = cell.cellIndex;
-        const isCellAlive = grid[rowIndex][cellIndex] === 1 ? true : false;
+    play() {
+        this.isPlaying = true;
+        this.controls.startButton.textContent = 'pause';
+        this._startInterval();
+    }
 
-        grid[rowIndex][cellIndex] = isCellAlive ? 0 : 1;
+    pause() {
+        this.isPlaying = false;
+        this.controls.startButton.textContent = 'play_arrow';
+        this._stopInterval();
+    }
 
-        cell.classList.toggle('alive', !isCellAlive);
-    });
+    reset() {
+        this.pause();
+        this.grid.reset();
+    }
 
-    root.appendChild(table);
+    randomize() {
+        this.reset();
+        this.grid.randomize();
+    }
 
-    return table;
-}
+    changeSpeed(value) {
+        this.speed = value;
+        this._stopInterval();
+        this._startInterval();
+    }
 
-function craeteControls() {
-    const startButton = document.createElement('button');
-    startButton.className = 'material-icons';
-    startButton.textContent = 'play_arrow';
-    startButton.addEventListener('click', function() {
-        if (isPlaying) {
-            isPlaying = false;
-            this.textContent = 'play_arrow';
-            clearInterval(interval);    
-        } else {
-            isPlaying = true;
-            this.textContent = 'pause';
-            interval = setInterval(play, GAME_SPEED);
-            play();
-        }
-    });
+    _init() {
+        this._createControls();
+        this._render();
+    }
 
-    const resetButton = document.createElement('button');
-    resetButton.className = 'material-icons';
-    resetButton.textContent = 'replay';
-    resetButton.addEventListener('click', function() {
-        isPlaying = false;
-        startButton.textContent = 'play_arrow';  
-        
-        clearInterval(interval); 
-        resetGrid();
-        updateView();
-    });
-
-    const randomizeButton = document.createElement('button');
-    randomizeButton.className = 'material-icons';
-    randomizeButton.textContent = 'transform';
-    randomizeButton.addEventListener('click', function() {
-        isPlaying = false;
+    _createControls() {
+        const startButton = document.createElement('button');
+        startButton.className = 'material-icons';
         startButton.textContent = 'play_arrow';
+        startButton.addEventListener('click', this._handleStartButtonClick);
+        this.controls.startButton = startButton;
 
-        clearInterval(interval); 
-        randomizeGrid();
-        updateView();
-    });
+        const resetButton = document.createElement('button');
+        resetButton.className = 'material-icons';
+        resetButton.textContent = 'replay';
+        resetButton.addEventListener('click', () => this.reset());
 
-    const speedSlider = document.createElement('input');
-    speedSlider.type = 'range';
-    speedSlider.min = 0;
-    speedSlider.max = 900;
-    speedSlider.step = 100;
-    speedSlider.addEventListener('input', function() {
-        clearInterval(interval);
-        interval = setInterval(play, GAME_SPEED - this.value);
-    });
+        const randomizeButton = document.createElement('button');
+        randomizeButton.className = 'material-icons';
+        randomizeButton.textContent = 'transform';
+        randomizeButton.addEventListener('click', () => this.randomize());
 
-    const container = document.createElement('div');
-    container.className = 'controls';
-    
-    container.append(startButton, resetButton, randomizeButton, speedSlider);
+        const speedSlider = document.createElement('input');
+        speedSlider.type = 'range';
+        speedSlider.min = 0;
+        speedSlider.max = 900;
+        speedSlider.step = 100;
+        speedSlider.value = this.speed;
+        speedSlider.addEventListener('input', () => this.changeSpeed(speedSlider.value));
 
-    root.appendChild(container);
-}
+        const container = document.createElement('div');
+        container.className = 'controls';
+        
+        container.append(startButton, resetButton, randomizeButton, speedSlider);
 
-function createGrid(rows, cols) {
-    const grid = [];
-
-    for (let i = 0; i < rows; i++) {
-        grid[i] = [];
-
-        for (let j = 0; j < cols; j++) {
-            grid[i][j] = 0;
-        }        
+        //root.appendChild(container);
+        this.controlsElement = container;
     }
 
-    return grid;
-}
-
-function randomizeGrid() {
-    for (let i = 0; i < grid.length; i++) {
-        for (let j = 0; j < grid[i].length; j++) {
-            grid[i][j] = Math.round(Math.random());
-        }        
-    }
-}
-
-function resetGrid() {
-    for (let i = 0; i < grid.length; i++) {
-        for (let j = 0; j < grid[i].length; j++) {
-            grid[i][j] = 0;
-        }        
-    }
-}
-
-function computeNextGrid() {
-    for (let i = 0; i < grid.length; i++) {
-        for (let j = 0; j < grid[i].length; j++) {
-            applyRules(i, j);
-        }        
+    _startInterval() {
+        this.interval = setInterval(this.next, this.baseSpeed - this.speed);
     }
 
-    copyNextGrid();
-}
-
-function copyNextGrid() {
-    for (let i = 0; i < grid.length; i++) {
-        for (let j = 0; j < grid[i].length; j++) {
-            grid[i][j] = nextGrid[i][j];
-            nextGrid[i][j] = 0;
-        }        
+    _stopInterval() {        
+        clearInterval(this.interval);
     }
-}
 
-function applyRules(row, col) {
-    const isCellAlive = grid[row][col];
-    const numberOfNeighbors = countNeighbors(row, col);
+    _render() {
+        root.appendChild(this.grid.element);
+        root.appendChild(this.controlsElement);
+    }
 
-    if (isCellAlive) {
-        if (numberOfNeighbors < 2 || numberOfNeighbors > 3) {
-            nextGrid[row][col] = 0;
+    _handleStartButtonClick() {
+        if (this.isPlaying) {  
+            this.pause(); 
         } else {
-            nextGrid[row][col] = 1;
-        }
-    } else {
-        if (numberOfNeighbors === 3) {
-            nextGrid[row][col] = 1;
+            this.play();
         }
     }
-}
-
-function countNeighbors(row, col) {
-    let count = 0;
-
-    if (row-1 >= 0) {
-        if (grid[row-1][col] === 1) count ++;
-    }
-
-    if (row-1 >= 0 && col-1 >= 0) {
-        if (grid[row-1][col-1] === 1) count ++;
-    }
-
-    if (col-1 >= 0) {
-        if (grid[row][col-1] === 1) count ++;
-    }
-
-    if (row+1 < GRID_ROWS && col-1 >= 0) {
-        if (grid[row+1][col-1] === 1) count ++;
-    }
-
-    if (row+1 < GRID_ROWS) {
-        if (grid[row+1][col] === 1) count ++;
-    }
-
-    if (row+1 < GRID_ROWS && col+1 < GRID_COLS) {
-        if (grid[row+1][col+1] === 1) count ++;
-    }
-
-    if (col+1 < GRID_COLS) {
-        if (grid[row][col+1] === 1) count ++;
-    }
-
-    if (row-1 >= 0 && col+1 < GRID_COLS) {
-        if (grid[row-1][col+1] === 1) count ++;
-    }
-
-    return count;
 }
